@@ -12,16 +12,15 @@ window_intervals = [
     # (1.0, 15.0)  # All data
 ]
 
-wavelength_1 = 10.75
-wavelength_2 = 11.85
-tb_thresh = 278.0
+
+
 number_test_spectra = 3
 
 # Constants
 files = {
-    "clear": "Dataset_cloud_clear_nosol/clear_sky_IASI_radiances.nc",
-    "cloudy": "Dataset_cloud_clear_nosol/cloudy_sky_IASI_radiances.nc",
-    "test": "Dataset_cloud_clear_nosol/test_set.nc",
+    "clear":  "./Dataset_cloud_clear_nosol/clear_sky_IASI_radiances.nc",
+    "cloudy": "./Dataset_cloud_clear_nosol/cloudy_sky_IASI_radiances.nc",
+    "test":   "./Dataset_cloud_clear_nosol/test_set.nc",
 }
 
 dim_mapping = {"n_match": "n_spectra", "n_ch_I": "n_channels"}
@@ -87,7 +86,7 @@ def main():
             ds = ds.rename(dim_mapping)
             ds = ds.rename_vars(var_mapping)
             tb = rad2brightb(ds.wavenumber, ds.rad)
-            ds["tb"] = xr.DataArray(tb, dims=ds.rad.dims)
+            ds["TB"] = xr.DataArray(tb, dims=ds.rad.dims)
             ds["wavelength"] = to_wavelength(ds.wavenumber)
             ds["windows"] = get_window_mask(ds.wavelength, window_intervals)
             datasets[label] = ds
@@ -98,8 +97,8 @@ def main():
     stds = {}
     for label, ds in datasets.items():
         window_mask = ds.windows
-        means[label] = xr.where(window_mask, ds.tb.mean(dim="n_spectra"), np.nan)
-        stds[label] = xr.where(window_mask, ds.tb.std(dim="n_spectra"), np.nan)
+        means[label] = xr.where(window_mask, ds.TB.mean(dim="n_spectra"), np.nan)
+        stds[label] = xr.where(window_mask, ds.TB.std(dim="n_spectra"), np.nan)
 
     print("Plot ...")
 
@@ -113,6 +112,10 @@ def main():
         plt.ylabel("lat (deg)")
         plt.show()
 
+
+    tb_thresh = 278.0
+    wavelength_1 = 10.75
+    wavelength_2 = 11.85
     # Plot mean Tb
     if True:
         fig, axes = plt.subplots(nrows=1, sharex=True)
@@ -126,16 +129,18 @@ def main():
                 color=colors[label],
                 alpha=0.33,
             )
+        
+
         axes.axhline(tb_thresh, ls="--", c="k")
         axes.axvline(wavelength_1, ls=":", c="k")
         axes.axvline(wavelength_2, ls=":", c="k")
         ds = datasets["test"]
         for i_plot in range(number_test_spectra):
             label = "test spectra" if i_plot == 0 else None
-            tb = xr.where(ds.windows, ds.tb.isel(n_spectra=i_plot), np.nan)
+            tb = xr.where(ds.windows, ds.TB.isel(n_spectra=i_plot), np.nan)
             axes.plot(ds.wavelength, tb, c="k", label=label)
         axes.set_xlabel("wavelength ($\mu$m)")
-        axes.set_ylabel("Tb (K)")
+        axes.set_ylabel("TB (K)")
         axes.legend()
         plt.show()
 
@@ -153,34 +158,35 @@ def main():
         for label, ds in datasets.items():
             i_1 = get_index_of_wavelength(ds.wavelength, wavelength_1)
             i_2 = get_index_of_wavelength(ds.wavelength, wavelength_2)
-            tb_1 = ds.tb.isel(n_channels=i_1)
-            tb_2 = ds.tb.isel(n_channels=i_2)
+            tb_1 = ds.TB.isel(n_channels=i_1)
+            tb_2 = ds.TB.isel(n_channels=i_2)
             plt.plot(
                 tb_1, tb_2 - tb_1, "o", color=colors[label], label=label, alpha=0.5
             )
         plt.axvline(tb_thresh, c="k", ls="--")
         plt.axhline(0, c="grey", ls="-", lw=0.5)
-        plt.xlabel(f"Tb at {wavelength_1} $\mu$m (K)")
-        plt.ylabel(f"Tb at {wavelength_2} $\mu$m - Tb at {wavelength_1} $\mu$m (K)")
+        plt.xlabel(f"TB at {wavelength_1} $\mu$m (K)")
+        plt.ylabel(f"TB at {wavelength_2} $\mu$m - TB at {wavelength_1} $\mu$m (K)")
         plt.legend()
         plt.show()
 
     # Classify
     print("Classify ...")
     ds = datasets["test"]
-    i_1 = get_index_of_wavelength(ds.wavelength, wavelength_1)
-    tb_1 = ds.tb.isel(n_channels=i_1)
+    clas_wavelength = wavelength_1
+    i_1 = get_index_of_wavelength(ds.wavelength, clas_wavelength)
+    tb_1 = ds.TB.isel(n_channels=i_1)
     is_cloudy = tb_1 < tb_thresh  # ToDo: Where is our control?
 
     # Plot classification
     if True:
-        bins = np.arange(tb_thresh - 60, tb_thresh + 26, 5)
+        bins = np.arange(tb_thresh - 60, tb_thresh + 26, 1)
         fig, axes = plt.subplots(nrows=2, sharex=True)
-        for label in training_labels:
+        for i, label in enumerate(training_labels):
             ds = datasets[label]
             i_1 = get_index_of_wavelength(ds.wavelength, wavelength_1)
             axes[0].hist(
-                ds.tb.isel(n_channels=i_1),
+                ds.TB.isel(n_channels=i_1),
                 bins=bins,
                 facecolor=colors[label],
                 alpha=0.5,
